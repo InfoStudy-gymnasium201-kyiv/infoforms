@@ -105,6 +105,7 @@
     const state = {
         view: 'loading', // loading, quiz, submission, result, error
         quizData: null,
+        quizFormat: 'old', // 'old' або 'new'
         userAnswers: {},
         error: '',
         studentName: '',
@@ -115,14 +116,20 @@
     // --- UTILITIES ---
     function validateJsonStructure(data) {
         if (!data || typeof data !== 'object') return false;
-        if (!data.quizTitle || typeof data.quizTitle !== 'string') return false;
-        if (!data.questions || !Array.isArray(data.questions)) return false;
         
-        if (data.questions.length > 0) {
-            const q = data.questions[0];
-            if (!q.question || !q.options || !q.correctOption) return false;
+        // Перевіряємо новий формат (має 'title')
+        if (data.title && typeof data.title === 'string' && Array.isArray(data.questions)) {
+            state.quizFormat = 'new';
+            return true;
         }
-        return true;
+        
+        // Перевіряємо старий формат (має 'quizTitle')
+        if (data.quizTitle && typeof data.quizTitle === 'string' && Array.isArray(data.questions)) {
+            state.quizFormat = 'old';
+            return true;
+        }
+
+        return false;
     }
 
     function formatText(text) {
@@ -157,15 +164,18 @@
             if (validateJsonStructure(data)) {
                 state.quizData = data;
                 
+                const title = data.title || data.quizTitle;
+                const subject = data.subject ? ` | ${data.subject}` : '';
+
                 // Оновлення текстових блоків у Header та Hero
-                document.getElementById('header-title').innerText = data.quizTitle;
-                document.getElementById('page-title').innerText = `${data.quizTitle} | Інтерактивні тести`;
-                document.getElementById('hero-title').innerText = data.quizTitle;
+                document.getElementById('header-title').innerText = title;
+                document.getElementById('page-title').innerText = `${title}${subject} | Інтерактивні тести`;
+                document.getElementById('hero-title').innerText = title;
                 document.getElementById('hero-desc').innerText = `Тест містить ${data.questions.length} запитань. Перевірте свої знання та збережіть результат після виконання!`;
                 
                 setView('quiz');
             } else {
-                state.error = 'Структура JSON-файлу тесту некоректна. Перевірте наявність обов\'язкових полів.';
+                state.error = 'Структура JSON-файлу тесту некоректна. Перевірте наявність полів "title" або "quizTitle".';
                 setView('error');
             }
         } catch (err) {
@@ -180,9 +190,128 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    function handleAnswer(qIndex, option) {
-        state.userAnswers[qIndex] = option;
+    function handleAnswer(qIndex, answerValue) {
+        state.userAnswers[qIndex] = answerValue;
         render(); 
+    }
+
+    function handleMatchingAnswer(qIndex, leftId, rightKey) {
+        if (!state.userAnswers[qIndex] || typeof state.userAnswers[qIndex] !== 'object') {
+            state.userAnswers[qIndex] = {};
+        }
+        if (rightKey === "") {
+            delete state.userAnswers[qIndex][leftId];
+        } else {
+            state.userAnswers[qIndex][leftId] = rightKey;
+        }
+        render();
+    }
+
+    function handleBlankAnswer(qIndex, blankIndex, value) {
+        if (!Array.isArray(state.userAnswers[qIndex])) {
+            state.userAnswers[qIndex] = [];
+        }
+        state.userAnswers[qIndex][blankIndex] = value;
+        render();
+    }
+
+    function isQuestionAnswered(qIndex) {
+        const q = state.quizData.questions[qIndex];
+        const userAns = state.userAnswers[qIndex];
+
+        if (userAns === undefined || userAns === null) return false;
+
+        if (state.quizFormat === 'old') {
+            return userAns !== '';
+        }
+
+        // Перевірка за типами у новому форматі
+        const type = q.type || 'single_choice';
+
+        if (type === 'single_choice' || type === 'true_false') {
+            return typeof userAns === 'string' && userAns.trim() !== '';
+        }
+
+        if (type === 'matching') {
+            if (!userAns || typeof userAns !== 'object') return false;
+            // Перевіряємо чи заповнено для всіх лівих елементів
+            return q.left_items.every(lItem => userAns[lItem.id] && userAns[lItem.id] !== '');
+        }
+
+        if (type === 'fill_in_blanks') {
+            if (!Array.isArray(userAns)) return false;
+            const count = q.blanks_count || (Array.isArray(q.correct_answer) ? q.correct_answer.length : 1);
+            for (let i = 0; i < count; i++) {
+                if (!userAns[i] || userAns[i].trim() === '') return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    function calculateScore() {
+        let score = 0;
+        let maxPoints = 0;
+        let correctQuestionsCount = 0;
+        const totalQuestions = state.quizData.questions.length;
+
+        state.quizData.questions.forEach((q, idx) => {
+            const userAns = state.userAnswers[idx];
+
+            if (state.quizFormat === 'old') {
+                maxPoints += 1;
+                if (userAns?.trim() === q.correctOption?.trim()) {
+                    score += 1;
+                    correctQuestionsCount += 1;
+                }
+            } else {
+                const points = q.points || 1;
+                maxPoints += points;
+                const type = q.type || 'single_choice';
+
+                if (type === 'single_choice' || type === 'true_false') {
+                    if (userAns?.trim() === q.correct_answer?.trim()) {
+                        score += points;
+                        correctQuestionsCount += 1;
+                    }
+                } else if (type === 'matching') {
+                    if (userAns && typeof userAns === 'object' && typeof q.correct_answer === 'object') {
+                        let isFullCorrect = true;
+                        q.left_items.forEach(lItem => {
+                            if (userAns[lItem.id] !== q.correct_answer[lItem.id]) {
+                                isFullCorrect = false;
+                            }
+                        });
+                        if (isFullCorrect) {
+                            score += points;
+                            correctQuestionsCount += 1;
+                        }
+                    }
+                } else if (type === 'fill_in_blanks') {
+                    if (Array.isArray(userAns) && Array.isArray(q.correct_answer)) {
+                        let isFullCorrect = true;
+                        q.correct_answer.forEach((correctAns, bIdx) => {
+                            const uVal = (userAns[bIdx] || '').trim().toLowerCase();
+                            const cVal = correctAns.trim().toLowerCase();
+                            if (uVal !== cVal) {
+                                isFullCorrect = false;
+                            }
+                        });
+                        if (isFullCorrect) {
+                            score += points;
+                            correctQuestionsCount += 1;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Форматування відображення
+        const hasCustomPoints = state.quizFormat === 'new' && state.quizData.questions.some(q => q.points && q.points !== 1);
+        const scoreText = hasCustomPoints ? `${score} / ${maxPoints} балів` : `${correctQuestionsCount} / ${totalQuestions}`;
+
+        return { score, maxPoints, correctQuestionsCount, totalQuestions, scoreText, hasCustomPoints };
     }
 
     function updateStudentData(field, value) {
@@ -210,14 +339,7 @@
         render();
 
         // 1. Обчислення результату
-        let score = 0;
-        const total = state.quizData.questions.length;
-        state.quizData.questions.forEach((q, idx) => {
-            if (state.userAnswers[idx]?.trim() === q.correctOption?.trim()) {
-                score++;
-            }
-        });
-        const scoreText = `${score} / ${total}`;
+        const { scoreText } = calculateScore();
         const dateStr = new Date().toLocaleString('uk-UA');
 
         // 2. Підготовка Google Form
@@ -348,54 +470,167 @@
         `;
     }
 
+    function renderQuestionBody(q, idx) {
+        if (state.quizFormat === 'old') {
+            return renderSingleChoiceOptions(idx, q.options.map(opt => ({ key: '', text: opt })), 'text');
+        }
+
+        const type = q.type || 'single_choice';
+
+        if (type === 'single_choice' || type === 'true_false') {
+            return renderSingleChoiceOptions(idx, q.options, 'key');
+        }
+
+        if (type === 'matching') {
+            const userMatching = state.userAnswers[idx] || {};
+            
+            const rightOptionsHtml = q.right_items.map(r => `
+                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-700 flex gap-2">
+                    <span class="font-bold text-brand-700">${r.key}.</span>
+                    <span>${formatText(r.text)}</span>
+                </div>
+            `).join('');
+
+            const leftRowsHtml = q.left_items.map(l => {
+                const selectedKey = userMatching[l.id] || '';
+                
+                const selectOptions = `
+                    <option value="">-- Виберіть --</option>
+                    ${q.right_items.map(r => `
+                        <option value="${r.key}" ${selectedKey === r.key ? 'selected' : ''}>${r.key}</option>
+                    `).join('')}
+                `;
+
+                return `
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white border border-slate-200 rounded-xl">
+                        <div class="text-xs sm:text-sm text-slate-800 font-medium flex gap-2">
+                            <span class="font-bold text-brand-700">${l.id}.</span>
+                            <span>${formatText(l.text)}</span>
+                        </div>
+                        <select 
+                            onchange="handleMatchingAnswer(${idx}, ${l.id}, this.value)"
+                            class="border border-slate-200 rounded-lg p-2 text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 outline-none bg-slate-50 font-bold text-brand-800"
+                        >
+                            ${selectOptions}
+                        </select>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="space-y-4">
+                    <div class="space-y-2">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Варіанти дій:</span>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            ${rightOptionsHtml}
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Установіть відповідність:</span>
+                        <div class="space-y-2">
+                            ${leftRowsHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (type === 'fill_in_blanks') {
+            const count = q.blanks_count || (Array.isArray(q.correct_answer) ? q.correct_answer.length : 1);
+            const userBlanks = state.userAnswers[idx] || [];
+
+            let inputsHtml = '';
+            for (let b = 0; b < count; b++) {
+                const val = userBlanks[b] || '';
+                inputsHtml += `
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs font-bold text-brand-700 bg-brand-50 border border-brand-100 px-2.5 py-1 rounded-lg">
+                            Пропуск ${b + 1}
+                        </span>
+                        <input 
+                            type="text"
+                            value="${val.replace(/"/g, '&quot;')}"
+                            oninput="handleBlankAnswer(${idx}, ${b}, this.value)"
+                            placeholder="Введіть відповідь..."
+                            class="flex-grow p-2.5 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
+                        />
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-2">Вкажіть пропущені слова:</span>
+                    ${inputsHtml}
+                </div>
+            `;
+        }
+
+        return '';
+    }
+
+    function renderSingleChoiceOptions(idx, options, compareField) {
+        return `
+            <div class="space-y-2.5">
+                ${options.map(opt => {
+                    const optValue = opt[compareField] || opt.text || opt;
+                    const isSelected = state.userAnswers[idx] === optValue;
+                    const borderClass = isSelected 
+                        ? 'border-brand-500 bg-brand-50/60 shadow-sm ring-1 ring-brand-500' 
+                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50';
+
+                    return `
+                        <label class="flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${borderClass}">
+                            <div class="pt-0.5 flex-shrink-0">
+                                <input
+                                    type="radio"
+                                    name="question-${idx}"
+                                    value="${optValue.replace(/"/g, '&quot;')}" 
+                                    ${isSelected ? 'checked' : ''}
+                                    onchange="handleAnswer(${idx}, this.value)"
+                                    class="w-4 h-4 text-brand-600 focus:ring-brand-500 border-slate-300"
+                                />
+                            </div>
+                            <span class="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
+                                ${opt.key ? `<strong class="text-brand-800 mr-1">${opt.key}.</strong>` : ''}${formatText(opt.text || opt)}
+                            </span>
+                        </label>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
     function renderQuiz() {
-        const answeredCount = Object.keys(state.userAnswers).length;
         const totalQuestions = state.quizData.questions.length;
+        
+        let answeredCount = 0;
+        for (let i = 0; i < totalQuestions; i++) {
+            if (isQuestionAnswered(i)) answeredCount++;
+        }
+
         const isAllAnswered = answeredCount === totalQuestions;
         const progressPercentage = Math.round((answeredCount / totalQuestions) * 100);
 
         const questionsHtml = state.quizData.questions.map((q, idx) => {
-            const optionsHtml = q.options.map((opt, optIdx) => {
-                const isSelected = state.userAnswers[idx] === opt;
-                const borderClass = isSelected 
-                    ? 'border-brand-500 bg-brand-50/60 shadow-sm ring-1 ring-brand-500' 
-                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50';
-                
-                return `
-                    <label class="flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${borderClass}">
-                        <div class="pt-0.5 flex-shrink-0">
-                            <input
-                                type="radio"
-                                name="question-${idx}"
-                                value="${opt.replace(/"/g, '&quot;')}" 
-                                ${isSelected ? 'checked' : ''}
-                                onchange="handleAnswer(${idx}, this.value)"
-                                class="w-4 h-4 text-brand-600 focus:ring-brand-500 border-slate-300"
-                            />
-                        </div>
-                        <span class="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">${formatText(opt)}</span>
-                    </label>
-                `;
-            }).join('');
-
+            const pointsText = q.points ? `<span class="text-xs text-slate-400 font-normal">(${q.points} б.)</span>` : '';
             return `
                 <section id="q-${idx}" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm scroll-mt-24">
                     <div class="flex items-start gap-3 mb-4">
                         <span class="px-2.5 py-1 bg-brand-100 text-brand-800 text-xs font-bold rounded-lg flex-shrink-0">
                             ${idx + 1}
                         </span>
-                        <h3 class="text-base sm:text-lg font-bold font-heading text-slate-800 leading-snug whitespace-pre-wrap">${formatText(q.question)}</h3>
+                        <h3 class="text-base sm:text-lg font-bold font-heading text-slate-800 leading-snug whitespace-pre-wrap">
+                            ${formatText(q.question)} ${pointsText}
+                        </h3>
                     </div>
-                    <div class="space-y-2.5">
-                        ${optionsHtml}
-                    </div>
+                    ${renderQuestionBody(q, idx)}
                 </section>
             `;
         }).join('');
 
-        // Навігаційна сітка у боковій панелі
         const navGrid = state.quizData.questions.map((_, idx) => {
-            const isAnswered = state.userAnswers[idx] !== undefined;
+            const isAnswered = isQuestionAnswered(idx);
             const bgClass = isAnswered 
                 ? 'bg-brand-600 text-white font-bold' 
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200';
@@ -463,16 +698,10 @@
     }
 
     function renderResult() {
-        let score = 0;
-        const total = state.quizData.questions.length;
+        const { score, maxPoints, correctQuestionsCount, totalQuestions, scoreText, hasCustomPoints } = calculateScore();
 
-        state.quizData.questions.forEach((q, idx) => {
-            const userAnswer = state.userAnswers[idx];
-            const isCorrect = userAnswer?.trim() === q.correctOption?.trim();
-            if (isCorrect) score++;
-        });
-
-        const ratio = total > 0 ? score / total : 0;
+        const ratio = hasCustomPoints ? (maxPoints > 0 ? score / maxPoints : 0) : (totalQuestions > 0 ? correctQuestionsCount / totalQuestions : 0);
+        
         let scoreBadge = 'bg-red-100 text-red-700 border-red-200';
         let message = 'Спробуйте ще раз для покращення результату!';
         
@@ -495,7 +724,7 @@
                     <h2 class="text-2xl sm:text-3xl font-bold font-heading text-slate-800 mb-2">Тест завершено</h2>
                     
                     <div class="inline-block px-6 py-2.5 rounded-full border text-3xl font-extrabold font-heading ${scoreBadge} my-4">
-                        ${score} / ${total}
+                        ${scoreText}
                     </div>
                     
                     <p class="text-slate-600 text-sm max-w-md mx-auto mb-6">${message}</p>
