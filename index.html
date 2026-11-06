@@ -252,7 +252,6 @@
 
     function calculateScore() {
         let score = 0;
-        let maxPoints = 0;
         let correctQuestionsCount = 0;
         const totalQuestions = state.quizData.questions.length;
 
@@ -260,19 +259,16 @@
             const userAns = state.userAnswers[idx];
 
             if (state.quizFormat === 'old') {
-                maxPoints += 1;
                 if (userAns?.trim() === q.correctOption?.trim()) {
                     score += 1;
                     correctQuestionsCount += 1;
                 }
             } else {
-                const points = q.points || 1;
-                maxPoints += points;
                 const type = q.type || 'single_choice';
 
                 if (type === 'single_choice' || type === 'true_false') {
                     if (userAns?.trim() === q.correct_answer?.trim()) {
-                        score += points;
+                        score += 1;
                         correctQuestionsCount += 1;
                     }
                 } else if (type === 'matching') {
@@ -284,7 +280,7 @@
                             }
                         });
                         if (isFullCorrect) {
-                            score += points;
+                            score += 1;
                             correctQuestionsCount += 1;
                         }
                     }
@@ -299,7 +295,7 @@
                             }
                         });
                         if (isFullCorrect) {
-                            score += points;
+                            score += 1;
                             correctQuestionsCount += 1;
                         }
                     }
@@ -307,11 +303,10 @@
             }
         });
 
-        // Форматування відображення
-        const hasCustomPoints = state.quizFormat === 'new' && state.quizData.questions.some(q => q.points && q.points !== 1);
-        const scoreText = hasCustomPoints ? `${score} / ${maxPoints} балів` : `${correctQuestionsCount} / ${totalQuestions}`;
+        // Завжди показуємо виключно у форматі "Кількість правильних / Всього"
+        const scoreText = `${correctQuestionsCount} / ${totalQuestions}`;
 
-        return { score, maxPoints, correctQuestionsCount, totalQuestions, scoreText, hasCustomPoints };
+        return { score: correctQuestionsCount, maxPoints: totalQuestions, correctQuestionsCount, totalQuestions, scoreText };
     }
 
     function updateStudentData(field, value) {
@@ -613,7 +608,6 @@
         const progressPercentage = Math.round((answeredCount / totalQuestions) * 100);
 
         const questionsHtml = state.quizData.questions.map((q, idx) => {
-            const pointsText = q.points ? `<span class="text-xs text-slate-400 font-normal">(${q.points} б.)</span>` : '';
             return `
                 <section id="q-${idx}" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm scroll-mt-24">
                     <div class="flex items-start gap-3 mb-4">
@@ -621,7 +615,7 @@
                             ${idx + 1}
                         </span>
                         <h3 class="text-base sm:text-lg font-bold font-heading text-slate-800 leading-snug whitespace-pre-wrap">
-                            ${formatText(q.question)} ${pointsText}
+                            ${formatText(q.question)}
                         </h3>
                     </div>
                     ${renderQuestionBody(q, idx)}
@@ -698,9 +692,9 @@
     }
 
     function renderResult() {
-        const { score, maxPoints, correctQuestionsCount, totalQuestions, scoreText, hasCustomPoints } = calculateScore();
+        const { correctQuestionsCount, totalQuestions, scoreText } = calculateScore();
 
-        const ratio = hasCustomPoints ? (maxPoints > 0 ? score / maxPoints : 0) : (totalQuestions > 0 ? correctQuestionsCount / totalQuestions : 0);
+        const ratio = totalQuestions > 0 ? correctQuestionsCount / totalQuestions : 0;
         
         let scoreBadge = 'bg-red-100 text-red-700 border-red-200';
         let message = 'Спробуйте ще раз для покращення результату!';
