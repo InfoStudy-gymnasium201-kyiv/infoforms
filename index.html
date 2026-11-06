@@ -81,7 +81,7 @@
         Завантаження матеріалів...
       </h1>
       <p id="hero-desc" class="text-brand-100 text-xs sm:text-sm max-w-3xl leading-relaxed">
-        Будь ласка, уважно читайте запитання та вибирайте один із правильних варіантів відповідей.
+        Будь ласка, уважно читайте запитання та вибирайте відповіді.
       </p>
     </div>
   </section>
@@ -112,17 +112,66 @@
         isSubmitting: false
     };
 
-    // --- UTILITIES ---
-    function validateJsonStructure(data) {
-        if (!data || typeof data !== 'object') return false;
-        if (!data.quizTitle || typeof data.quizTitle !== 'string') return false;
-        if (!data.questions || !Array.isArray(data.questions)) return false;
-        
-        if (data.questions.length > 0) {
-            const q = data.questions[0];
-            if (!q.question || !q.options || !q.correctOption) return false;
-        }
-        return true;
+    // --- UTILITIES & NORMALIZATION ---
+    function normalizeQuizData(data) {
+        if (!data || typeof data !== 'object') return null;
+
+        // Перевірка старого чи нового формату за ключами title / quizTitle
+        const title = data.title || data.quizTitle;
+        if (!title || !data.questions || !Array.isArray(data.questions)) return null;
+
+        const normalizedQuestions = data.questions.map((q, idx) => {
+            // Визначення типу питання
+            let type = q.type || 'single_choice';
+            
+            if (type === 'matching') {
+                return {
+                    id: q.id || idx + 1,
+                    type: 'matching',
+                    question: q.question,
+                    left_items: q.left_items || [],
+                    right_items: q.right_items || [],
+                    correct_answer: q.correct_answer || {}
+                };
+            }
+
+            if (type === 'fill_in_blanks') {
+                return {
+                    id: q.id || idx + 1,
+                    type: 'fill_in_blanks',
+                    question: q.question,
+                    blanks_count: q.blanks_count || 0,
+                    correct_answer: q.correct_answer || [],
+                    incorrect_answers: q.incorrect_answers || []
+                };
+            }
+
+            // Звичайне питання (старий формат або single_choice / true_false)
+            let rawOptions = q.options || [];
+            let options = rawOptions.map(opt => typeof opt === 'object' ? opt.text : opt);
+            
+            let correctOption = q.correctOption;
+            if (!correctOption && q.correct_answer) {
+                if (typeof q.correct_answer === 'string') {
+                    const foundOpt = rawOptions.find(o => typeof o === 'object' && o.key === q.correct_answer);
+                    correctOption = foundOpt ? foundOpt.text : q.correct_answer;
+                }
+            }
+
+            return {
+                id: q.id || idx + 1,
+                type: 'single_choice',
+                question: q.question,
+                options: options,
+                correctOption: correctOption
+            };
+        });
+
+        return {
+            title: title,
+            subject: data.subject || '',
+            questions: normalizedQuestions
+        };
     }
 
     function formatText(text) {
@@ -152,20 +201,22 @@
         try {
             const response = await fetch(jsonUrl);
             if (!response.ok) throw new Error(`HTTP помилка! Статус: ${response.status}`);
-            const data = await response.json();
+            const rawData = await response.json();
             
-            if (validateJsonStructure(data)) {
-                state.quizData = data;
+            const normalizedData = normalizeQuizData(rawData);
+
+            if (normalizedData) {
+                state.quizData = normalizedData;
                 
                 // Оновлення текстових блоків у Header та Hero
-                document.getElementById('header-title').innerText = data.quizTitle;
-                document.getElementById('page-title').innerText = `${data.quizTitle} | Інтерактивні тести`;
-                document.getElementById('hero-title').innerText = data.quizTitle;
-                document.getElementById('hero-desc').innerText = `Тест містить ${data.questions.length} запитань. Перевірте свої знання та збережіть результат після виконання!`;
+                document.getElementById('header-title').innerText = normalizedData.title;
+                document.getElementById('page-title').innerText = `${normalizedData.title} | Інтерактивні тести`;
+                document.getElementById('hero-title').innerText = normalizedData.title;
+                document.getElementById('hero-desc').innerText = `Тест містить ${normalizedData.questions.length} запитань. Перевірте свої знання та збережіть результат після виконання!`;
                 
                 setView('quiz');
             } else {
-                state.error = 'Структура JSON-файлу тесту некоректна. Перевірте наявність обов\'язкових полів.';
+                state.error = 'Структура JSON-файлу тесту некоректна. Перевірте наявність полів "title" або "quizTitle".';
                 setView('error');
             }
         } catch (err) {
@@ -180,9 +231,51 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    function handleAnswer(qIndex, option) {
-        state.userAnswers[qIndex] = option;
+    function handleAnswer(qIndex, answer) {
+        state.userAnswers[qIndex] = answer;
         render(); 
+    }
+
+    function handleMatchingAnswer(qIndex, leftId, rightKey) {
+        if (!state.userAnswers[qIndex]) {
+            state.userAnswers[qIndex] = {};
+        }
+        state.userAnswers[qIndex][leftId] = rightKey;
+        render();
+    }
+
+    function handleBlankAnswer(qIndex, blankIdx, val) {
+        if (!state.userAnswers[qIndex]) {
+            state.userAnswers[qIndex] = [];
+        }
+        state.userAnswers[qIndex][blankIdx] = val;
+        render();
+    }
+
+    function isQuestionAnswered(qIndex) {
+        const q = state.quizData.questions[qIndex];
+        const ans = state.userAnswers[qIndex];
+        if (!ans) return false;
+
+        if (q.type === 'matching') {
+            return Object.keys(ans).length === q.left_items.length && Object.values(ans).every(v => v !== '');
+        }
+        if (q.type === 'fill_in_blanks') {
+            return Array.isArray(ans) && ans.length === q.blanks_count && ans.every(v => v && v.trim() !== '');
+        }
+        return true;
+    }
+
+    function isQuestionCorrect(q, ans) {
+        if (!ans) return false;
+
+        if (q.type === 'matching') {
+            return Object.keys(q.correct_answer).every(leftId => ans[leftId] === q.correct_answer[leftId]);
+        }
+        if (q.type === 'fill_in_blanks') {
+            return Array.isArray(ans) && q.correct_answer.every((val, idx) => ans[idx]?.trim() === val.trim());
+        }
+        return ans?.trim() === q.correctOption?.trim();
     }
 
     function updateStudentData(field, value) {
@@ -213,7 +306,7 @@
         let score = 0;
         const total = state.quizData.questions.length;
         state.quizData.questions.forEach((q, idx) => {
-            if (state.userAnswers[idx]?.trim() === q.correctOption?.trim()) {
+            if (isQuestionCorrect(q, state.userAnswers[idx])) {
                 score++;
             }
         });
@@ -349,34 +442,98 @@
     }
 
     function renderQuiz() {
-        const answeredCount = Object.keys(state.userAnswers).length;
+        const answeredCount = state.quizData.questions.filter((_, idx) => isQuestionAnswered(idx)).length;
         const totalQuestions = state.quizData.questions.length;
         const isAllAnswered = answeredCount === totalQuestions;
         const progressPercentage = Math.round((answeredCount / totalQuestions) * 100);
 
         const questionsHtml = state.quizData.questions.map((q, idx) => {
-            const optionsHtml = q.options.map((opt, optIdx) => {
-                const isSelected = state.userAnswers[idx] === opt;
-                const borderClass = isSelected 
-                    ? 'border-brand-500 bg-brand-50/60 shadow-sm ring-1 ring-brand-500' 
-                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50';
-                
-                return `
-                    <label class="flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${borderClass}">
-                        <div class="pt-0.5 flex-shrink-0">
-                            <input
-                                type="radio"
-                                name="question-${idx}"
-                                value="${opt.replace(/"/g, '&quot;')}" 
-                                ${isSelected ? 'checked' : ''}
-                                onchange="handleAnswer(${idx}, this.value)"
-                                class="w-4 h-4 text-brand-600 focus:ring-brand-500 border-slate-300"
-                            />
-                        </div>
-                        <span class="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">${formatText(opt)}</span>
-                    </label>
+            let optionsHtml = '';
+
+            if (q.type === 'single_choice') {
+                optionsHtml = q.options.map((opt) => {
+                    const isSelected = state.userAnswers[idx] === opt;
+                    const borderClass = isSelected 
+                        ? 'border-brand-500 bg-brand-50/60 shadow-sm ring-1 ring-brand-500' 
+                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50';
+                    
+                    return `
+                        <label class="flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${borderClass}">
+                            <div class="pt-0.5 flex-shrink-0">
+                                <input
+                                    type="radio"
+                                    name="question-${idx}"
+                                    value="${opt.replace(/"/g, '&quot;')}" 
+                                    ${isSelected ? 'checked' : ''}
+                                    onchange="handleAnswer(${idx}, this.value)"
+                                    class="w-4 h-4 text-brand-600 focus:ring-brand-500 border-slate-300"
+                                />
+                            </div>
+                            <span class="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">${formatText(opt)}</span>
+                        </label>
+                    `;
+                }).join('');
+            } else if (q.type === 'matching') {
+                const currentAns = state.userAnswers[idx] || {};
+                optionsHtml = `
+                    <div class="space-y-4">
+                        ${q.left_items.map(item => `
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                <span class="text-sm font-medium text-slate-700">${item.id}. ${formatText(item.text)}</span>
+                                <select 
+                                    onchange="handleMatchingAnswer(${idx}, ${item.id}, this.value)"
+                                    class="p-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                >
+                                    <option value="">Оберіть варіант...</option>
+                                    ${q.right_items.map(r => `
+                                        <option value="${r.key}" ${currentAns[item.id] === r.key ? 'selected' : ''}>
+                                            ${r.key}) ${formatText(r.text)}
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                        `).join('')}
+                    </div>
                 `;
-            }).join('');
+            } else if (q.type === 'fill_in_blanks') {
+                const currentAns = state.userAnswers[idx] || [];
+                let parts = q.question.split(/\[пропуск \d+\]/g);
+                let renderedQuestion = [];
+
+                for (let i = 0; i < parts.length; i++) {
+                    renderedQuestion.push(formatText(parts[i]));
+                    if (i < q.blanks_count) {
+                        const correctVal = q.correct_answer[i];
+                        const incorrectArr = q.incorrect_answers[i] || [];
+                        const opts = Array.from(new Set([correctVal, ...incorrectArr])).sort();
+
+                        renderedQuestion.push(`
+                            <select 
+                                onchange="handleBlankAnswer(${idx}, ${i}, this.value)"
+                                class="inline-block mx-1 p-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold text-brand-700"
+                            >
+                                <option value="">[пропуск ${i + 1}]</option>
+                                ${opts.map(o => `
+                                    <option value="${o.replace(/"/g, '&quot;')}" ${currentAns[i] === o ? 'selected' : ''}>${o}</option>
+                                `).join('')}
+                            </select>
+                        `);
+                    }
+                }
+
+                return `
+                    <section id="q-${idx}" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm scroll-mt-24">
+                        <div class="flex items-start gap-3 mb-4">
+                            <span class="px-2.5 py-1 bg-brand-100 text-brand-800 text-xs font-bold rounded-lg flex-shrink-0">
+                                ${idx + 1}
+                            </span>
+                            <div class="text-base sm:text-lg font-bold font-heading text-slate-800 leading-relaxed">
+                                ${renderedQuestion.join('')}
+                            </div>
+                        </div>
+                    </section>
+                `;
+            }
 
             return `
                 <section id="q-${idx}" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm scroll-mt-24">
@@ -395,7 +552,7 @@
 
         // Навігаційна сітка у боковій панелі
         const navGrid = state.quizData.questions.map((_, idx) => {
-            const isAnswered = state.userAnswers[idx] !== undefined;
+            const isAnswered = isQuestionAnswered(idx);
             const bgClass = isAnswered 
                 ? 'bg-brand-600 text-white font-bold' 
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200';
@@ -467,9 +624,7 @@
         const total = state.quizData.questions.length;
 
         state.quizData.questions.forEach((q, idx) => {
-            const userAnswer = state.userAnswers[idx];
-            const isCorrect = userAnswer?.trim() === q.correctOption?.trim();
-            if (isCorrect) score++;
+            if (isQuestionCorrect(q, state.userAnswers[idx])) score++;
         });
 
         const ratio = total > 0 ? score / total : 0;
