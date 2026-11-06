@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="uk" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title id="page-title">Інтерактивне тестування | InfoStudy</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts & Lucide Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4', 100: '#dcfce7', 200: '#bbf7d0', 300: '#86efac',
+              400: '#4ade80', 500: '#22c55e', 600: '#16a34a', 700: '#15803d',
+              800: '#166534', 900: '#14532d', 950: '#052e16'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            heading: ['Plus Jakarta Sans', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .loader {
+      border-top-color: #16a34a;
+      -webkit-animation: spinner 1s linear infinite;
+      animation: spinner 1s linear infinite;
+    }
+    @keyframes spinner {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="bg-[#f8faf9] text-slate-800 antialiased selection:bg-brand-200 selection:text-brand-900 min-h-screen flex flex-col justify-between">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-brand-100 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      
+      <!-- Logo and Titles -->
+      <div class="flex items-center space-x-3 overflow-hidden">
+        <a href="https://infostudy-gymnasium201-kyiv.github.io" class="flex-shrink-0 hover:opacity-80 transition-opacity" title="На головну InfoStudy">
+          <img src="https://github.com/InfoStudy-gymnasium201-kyiv/InfoStudy-gymnasium201-kyiv.github.io/blob/main/Extra/it405_logo.png?raw=true" alt="InfoStudy Logo" class="h-10 w-auto object-contain" />
+        </a>
+        <div class="min-w-0">
+          <span class="text-xs font-semibold text-brand-700 uppercase tracking-wider block truncate">Система перевірки знань</span>
+          <h1 id="header-title" class="text-sm md:text-base font-bold font-heading text-slate-800 truncate">Завантаження тесту...</h1>
+        </div>
+      </div>
+
+      <!-- Right Section: Back Button -->
+      <div class="flex items-center space-x-3 flex-shrink-0">
+        <a href="https://infostudy-gymnasium201-kyiv.github.io" class="inline-flex items-center space-x-1.5 bg-brand-50 hover:bg-brand-100 text-brand-800 border border-brand-200 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all shadow-sm hover:shadow">
+          <i data-lucide="arrow-left" class="w-4 h-4 text-brand-600"></i>
+          <span>На головну</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="bg-gradient-to-b from-brand-900 via-brand-800 to-emerald-900 text-white py-8 md:py-12 relative overflow-hidden">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center md:text-left">
+      <div class="inline-flex items-center space-x-2 bg-brand-500/20 backdrop-blur-md border border-brand-400/30 px-3 py-1 rounded-full text-brand-200 text-xs font-medium mb-3">
+        <i data-lucide="file-check-2" class="w-3.5 h-3.5 text-brand-400"></i>
+        <span id="hero-badge">Тестування</span>
+      </div>
+      <h1 id="hero-title" class="text-2xl sm:text-3xl lg:text-4xl font-extrabold font-heading tracking-tight text-white mb-2">
+        Завантаження матеріалів...
+      </h1>
+      <p id="hero-desc" class="text-brand-100 text-xs sm:text-sm max-w-3xl leading-relaxed">
+        Будь ласка, уважно читайте запитання та вибирайте один із правильних варіантів відповідей.
+      </p>
+    </div>
+  </section>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+    <div id="app">
+      <!-- Контент динамічно генерується JS -->
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 py-6 mt-12">
+    <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
+      <p>© InfoStudy Gymnasium 201 Kyiv. Усі права захищено.</p>
+    </div>
+  </footer>
+
+  <script>
+    // --- STATE MANAGEMENT ---
+    const state = {
+        view: 'loading', // loading, quiz, submission, result, error
+        quizData: null,
+        userAnswers: {},
+        error: '',
+        studentName: '',
+        studentClass: '',
+        isSubmitting: false
+    };
+
+    // --- UTILITIES ---
+    function validateJsonStructure(data) {
+        if (!data || typeof data !== 'object') return false;
+        if (!data.quizTitle || typeof data.quizTitle !== 'string') return false;
+        if (!data.questions || !Array.isArray(data.questions)) return false;
+        
+        if (data.questions.length > 0) {
+            const q = data.questions[0];
+            if (!q.question || !q.options || !q.correctOption) return false;
+        }
+        return true;
+    }
+
+    function formatText(text) {
+        if (!text) return '';
+        return text.replace(/\/n/g, '\n');
+    }
+
+    function getUrlFromParams() {
+        let queryString = window.location.search.substring(1); 
+        if (!queryString) return null;
+        if (queryString.startsWith('=')) {
+            queryString = queryString.substring(1);
+        }
+        return "https://raw.githubusercontent.com/InfoStudy-gymnasium201-kyiv/InfoStudy-gymnasium201-kyiv.github.io/refs/heads/main/Extra/TestsJSONs/" + decodeURIComponent(queryString) + ".json";
+    }
+
+    // --- CONTROLLER FUNCTIONS ---
+    async function init() {
+        const jsonUrl = getUrlFromParams();
+
+        if (!jsonUrl) {
+            state.error = 'Не вказано ідентифікатор тесту в адресному рядку (наприклад: ?=назва_тесту).';
+            setView('error');
+            return;
+        }
+
+        try {
+            const response = await fetch(jsonUrl);
+            if (!response.ok) throw new Error(`HTTP помилка! Статус: ${response.status}`);
+            const data = await response.json();
+            
+            if (validateJsonStructure(data)) {
+                state.quizData = data;
+                
+                // Оновлення текстових блоків у Header та Hero
+                document.getElementById('header-title').innerText = data.quizTitle;
+                document.getElementById('page-title').innerText = `${data.quizTitle} | Інтерактивні тести`;
+                document.getElementById('hero-title').innerText = data.quizTitle;
+                document.getElementById('hero-desc').innerText = `Тест містить ${data.questions.length} запитань. Перевірте свої знання та збережіть результат після виконання!`;
+                
+                setView('quiz');
+            } else {
+                state.error = 'Структура JSON-файлу тесту некоректна. Перевірте наявність обов\'язкових полів.';
+                setView('error');
+            }
+        } catch (err) {
+            state.error = `Не вдалося завантажити тест: ${err.message}. Перевірте URL-адресу та з'єднання з мережею.`;
+            setView('error');
+        }
+    }
+
+    function setView(viewName) {
+        state.view = viewName;
+        render();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function handleAnswer(qIndex, option) {
+        state.userAnswers[qIndex] = option;
+        render(); 
+    }
+
+    function updateStudentData(field, value) {
+        state[field] = value;
+        const btn = document.getElementById('submit-btn');
+        if (btn) {
+            const isValid = state.studentName.trim().length > 0 && state.studentClass.trim().length > 0;
+            btn.disabled = !isValid;
+            if (isValid) {
+                btn.className = "w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md hover:shadow-lg flex justify-center items-center gap-2 cursor-pointer";
+            } else {
+                btn.className = "w-full bg-slate-200 text-slate-400 font-bold py-3.5 px-6 rounded-xl cursor-not-allowed flex justify-center items-center gap-2";
+            }
+        }
+    }
+
+    function goToSubmission() {
+        setView('submission');
+    }
+
+    async function submitResults() {
+        if (!state.studentName.trim() || !state.studentClass.trim()) return;
+
+        state.isSubmitting = true;
+        render();
+
+        // 1. Обчислення результату
+        let score = 0;
+        const total = state.quizData.questions.length;
+        state.quizData.questions.forEach((q, idx) => {
+            if (state.userAnswers[idx]?.trim() === q.correctOption?.trim()) {
+                score++;
+            }
+        });
+        const percentage = Math.round((score / total) * 100);
+        const scoreText = `${score} / ${total} (${percentage}%)`;
+        const dateStr = new Date().toLocaleString('uk-UA');
+
+        // 2. Підготовка Google Form
+        const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSd_Pbc892R85y2-DdYRnzAbJEGl_L5_sqhjmrFpEV1SSSpedw/formResponse';
+        const formData = new URLSearchParams();
+        
+        formData.append('entry.36623648', state.studentName);     // ПІБ
+        formData.append('entry.1910569412', state.studentClass);  // Клас
+        formData.append('entry.619214537', scoreText);            // Оцінка
+        formData.append('entry.1914754828', dateStr);             // Дата
+
+        try {
+            await fetch(formUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: formData
+            });
+            
+            state.isSubmitting = false;
+            setView('result');
+
+        } catch (error) {
+            console.error('Помилка відправки форми:', error);
+            state.isSubmitting = false;
+            setView('result'); 
+        }
+    }
+
+    function restartQuiz() {
+        window.location.reload();
+    }
+
+    // --- VIEW RENDERERS ---
+
+    function renderLoading() {
+        return `
+            <div class="flex flex-col items-center justify-center py-20">
+                <div class="loader rounded-full border-4 border-slate-200 h-14 w-14 mb-4"></div>
+                <h2 class="text-lg font-bold font-heading text-slate-700">Завантаження питань тесту...</h2>
+                <p class="text-xs text-slate-500 mt-1">Це займе лише декілька секунд</p>
+            </div>
+        `;
+    }
+
+    function renderError() {
+        return `
+            <div class="max-w-2xl mx-auto bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-red-200">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="bg-red-50 p-3 rounded-xl border border-red-100 flex-shrink-0">
+                        <i data-lucide="alert-triangle" class="w-8 h-8 text-red-600"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold font-heading text-slate-800">Помилка завантаження</h2>
+                        <p class="text-xs text-slate-500">Не вдалося завантажити матеріали тесту</p>
+                    </div>
+                </div>
+                <p class="text-slate-600 text-sm mb-6 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">${state.error}</p>
+                <div class="flex justify-end">
+                    <a href="https://infostudy-gymnasium201-kyiv.github.io" class="bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition shadow-sm">
+                        Повернутися на головну
+                    </a>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderSubmission() {
+        const isValid = state.studentName.trim() && state.studentClass.trim();
+
+        return `
+            <div class="max-w-xl mx-auto bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200">
+                <div class="text-center mb-8">
+                    <div class="bg-brand-50 border border-brand-100 p-4 rounded-2xl inline-block mb-3">
+                        <i data-lucide="user-check" class="w-10 h-10 text-brand-600"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold font-heading text-slate-800">Збереження результату</h2>
+                    <p class="text-xs text-slate-500 mt-1">Введіть ваші дані для відправки оцінки вчителю</p>
+                </div>
+
+                <div class="space-y-5">
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">Прізвище та Ім'я учня/учениці</label>
+                        <input 
+                            type="text" 
+                            value="${state.studentName}"
+                            oninput="updateStudentData('studentName', this.value)"
+                            placeholder="Наприклад: Іванов Іван"
+                            ${state.isSubmitting ? 'disabled' : ''}
+                            class="w-full p-3.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none disabled:bg-slate-50 transition"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">Клас</label>
+                        <input 
+                            type="text" 
+                            value="${state.studentClass}"
+                            oninput="updateStudentData('studentClass', this.value)"
+                            placeholder="Наприклад: 10-А"
+                            ${state.isSubmitting ? 'disabled' : ''}
+                            class="w-full p-3.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none disabled:bg-slate-50 transition"
+                        >
+                    </div>
+
+                    <div class="pt-2">
+                        <button 
+                            id="submit-btn"
+                            onclick="submitResults()"
+                            ${!isValid || state.isSubmitting ? 'disabled' : ''}
+                            class="${isValid && !state.isSubmitting 
+                                ? 'w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md hover:shadow-lg flex justify-center items-center gap-2 cursor-pointer' 
+                                : 'w-full bg-slate-200 text-slate-400 font-bold py-3.5 px-6 rounded-xl cursor-not-allowed flex justify-center items-center gap-2'}"
+                        >
+                            ${state.isSubmitting ? `
+                                <div class="loader rounded-full border-2 border-slate-300 h-5 w-5 mr-2"></div>
+                                Збереження...
+                            ` : `
+                                <i data-lucide="send" class="w-4 h-4"></i>
+                                Завершити та надіслати
+                            `}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderQuiz() {
+        const answeredCount = Object.keys(state.userAnswers).length;
+        const totalQuestions = state.quizData.questions.length;
+        const isAllAnswered = answeredCount === totalQuestions;
+        const progressPercentage = Math.round((answeredCount / totalQuestions) * 100);
+
+        const questionsHtml = state.quizData.questions.map((q, idx) => {
+            const optionsHtml = q.options.map((opt, optIdx) => {
+                const isSelected = state.userAnswers[idx] === opt;
+                const borderClass = isSelected 
+                    ? 'border-brand-500 bg-brand-50/60 shadow-sm ring-1 ring-brand-500' 
+                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50';
+                
+                return `
+                    <label class="flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${borderClass}">
+                        <div class="pt-0.5 flex-shrink-0">
+                            <input
+                                type="radio"
+                                name="question-${idx}"
+                                value="${opt.replace(/"/g, '&quot;')}" 
+                                ${isSelected ? 'checked' : ''}
+                                onchange="handleAnswer(${idx}, this.value)"
+                                class="w-4 h-4 text-brand-600 focus:ring-brand-500 border-slate-300"
+                            />
+                        </div>
+                        <span class="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">${formatText(opt)}</span>
+                    </label>
+                `;
+            }).join('');
+
+            return `
+                <section id="q-${idx}" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm scroll-mt-24">
+                    <div class="flex items-start gap-3 mb-4">
+                        <span class="px-2.5 py-1 bg-brand-100 text-brand-800 text-xs font-bold rounded-lg flex-shrink-0">
+                            ${idx + 1}
+                        </span>
+                        <h3 class="text-base sm:text-lg font-bold font-heading text-slate-800 leading-snug whitespace-pre-wrap">${formatText(q.question)}</h3>
+                    </div>
+                    <div class="space-y-2.5">
+                        ${optionsHtml}
+                    </div>
+                </section>
+            `;
+        }).join('');
+
+        // Навігаційна сітка у боковій панелі
+        const navGrid = state.quizData.questions.map((_, idx) => {
+            const isAnswered = state.userAnswers[idx] !== undefined;
+            const bgClass = isAnswered 
+                ? 'bg-brand-600 text-white font-bold' 
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200';
+
+            return `
+                <a href="#q-${idx}" class="h-9 w-9 rounded-lg flex items-center justify-center text-xs transition ${bgClass}">
+                    ${idx + 1}
+                </a>
+            `;
+        }).join('');
+
+        return `
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                <!-- Sidebar status & navigation -->
+                <aside class="lg:col-span-3 order-2 lg:order-1">
+                    <div class="sticky top-20 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-5">
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Прогрес</span>
+                                <span class="text-xs font-bold text-brand-700">${answeredCount} з ${totalQuestions}</span>
+                            </div>
+                            <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                <div class="bg-brand-500 h-full transition-all duration-300" style="width: ${progressPercentage}%"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">Навігація за питаннями</span>
+                            <div class="flex flex-wrap gap-2">
+                                ${navGrid}
+                            </div>
+                        </div>
+
+                        <div class="pt-2 border-t border-slate-100">
+                            <button
+                                onclick="goToSubmission()"
+                                ${!isAllAnswered ? 'disabled' : ''}
+                                class="w-full py-3 px-4 rounded-xl font-bold text-xs sm:text-sm shadow transition-all flex items-center justify-center gap-2 ${isAllAnswered ? 'bg-brand-600 hover:bg-brand-700 text-white cursor-pointer' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}"
+                            >
+                                <span>Завершити тест</span>
+                                <i data-lucide="check-circle" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Questions list -->
+                <div class="lg:col-span-9 space-y-6 order-1 lg:order-2">
+                    ${questionsHtml}
+                    
+                    <div class="pt-4 flex justify-end">
+                        <button
+                            onclick="goToSubmission()"
+                            ${!isAllAnswered ? 'disabled' : ''}
+                            class="py-3.5 px-8 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 ${isAllAnswered ? 'bg-brand-600 hover:bg-brand-700 text-white transform hover:-translate-y-0.5' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}"
+                        >
+                            Завершити тест
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderResult() {
+        let score = 0;
+        const total = state.quizData.questions.length;
+
+        const resultsHtml = state.quizData.questions.map((q, idx) => {
+            const userAnswer = state.userAnswers[idx];
+            const isCorrect = userAnswer?.trim() === q.correctOption?.trim();
+            
+            if (isCorrect) score++;
+
+            const borderCard = isCorrect ? 'border-emerald-200 bg-emerald-50/20' : 'border-red-200 bg-red-50/20';
+            const badgeBg = isCorrect ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800';
+            const icon = isCorrect ? 'check-circle-2' : 'x-circle';
+
+            return `
+                <div class="bg-white p-6 rounded-2xl border ${borderCard} shadow-sm space-y-4">
+                    <div class="flex items-start gap-3">
+                        <span class="px-2.5 py-1 ${badgeBg} text-xs font-bold rounded-lg flex-shrink-0">
+                            ${idx + 1}
+                        </span>
+                        <h4 class="text-base font-bold font-heading text-slate-800 whitespace-pre-wrap">${formatText(q.question)}</h4>
+                    </div>
+
+                    <div class="space-y-2.5 pl-0 sm:pl-9">
+                        <!-- Варіант учня -->
+                        <div class="p-3.5 rounded-xl border ${isCorrect ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-red-200 bg-red-50 text-red-900'} flex items-start gap-2.5">
+                            <i data-lucide="${icon}" class="w-5 h-5 flex-shrink-0 mt-0.5 ${isCorrect ? 'text-emerald-600' : 'text-red-600'}"></i>
+                            <div class="text-xs sm:text-sm">
+                                <span class="font-bold uppercase tracking-wider block opacity-70 text-[10px] mb-0.5">Ваша відповідь:</span>
+                                <span class="whitespace-pre-wrap">${formatText(userAnswer || 'Немає відповіді')}</span>
+                            </div>
+                        </div>
+
+                        <!-- Правильний варіант, якщо учень помилився -->
+                        ${!isCorrect ? `
+                            <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 flex items-start gap-2.5">
+                                <i data-lucide="check-circle-2" class="w-5 h-5 flex-shrink-0 mt-0.5 text-brand-600"></i>
+                                <div class="text-xs sm:text-sm">
+                                    <span class="font-bold uppercase tracking-wider block opacity-70 text-[10px] text-slate-500 mb-0.5">Правильна відповідь:</span>
+                                    <span class="whitespace-pre-wrap">${formatText(q.correctOption)}</span>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const percentage = Math.round((score / total) * 100);
+        let scoreBadge = 'bg-red-100 text-red-700 border-red-200';
+        let message = 'Спробуйте ще раз для покращення результату!';
+        
+        if (percentage >= 50) { 
+            scoreBadge = 'bg-amber-100 text-amber-800 border-amber-200'; 
+            message = 'Хороший результат!'; 
+        }
+        if (percentage >= 80) { 
+            scoreBadge = 'bg-emerald-100 text-emerald-800 border-emerald-200'; 
+            message = 'Чудовий результат! Вітаємо!'; 
+        }
+
+        return `
+            <div class="max-w-4xl mx-auto space-y-8">
+                <!-- Result Summary Header -->
+                <div class="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center">
+                    <div class="inline-flex items-center justify-center p-4 rounded-full bg-brand-50 border border-brand-100 mb-4">
+                        <i data-lucide="award" class="w-12 h-12 text-brand-600"></i>
+                    </div>
+                    <h2 class="text-2xl sm:text-3xl font-bold font-heading text-slate-800 mb-2">Результат тестування</h2>
+                    
+                    <div class="inline-block px-4 py-1.5 rounded-full border text-2xl font-extrabold font-heading ${scoreBadge} mb-4">
+                        ${percentage}% (${score} / ${total})
+                    </div>
+                    
+                    <p class="text-slate-600 text-sm max-w-md mx-auto mb-6">${message}</p>
+                    
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 inline-flex items-center gap-3 text-xs text-slate-600 mb-6">
+                        <i data-lucide="check-circle" class="w-4 h-4 text-brand-600"></i>
+                        <span>Результати успішно відправлені: <strong class="text-slate-800">${state.studentName} (${state.studentClass})</strong></span>
+                    </div>
+
+                    <div class="flex justify-center">
+                        <button
+                            onclick="restartQuiz()"
+                            class="bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 px-6 rounded-xl transition flex items-center gap-2 text-xs sm:text-sm shadow-sm"
+                        >
+                            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                            Пройти тест повторно
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Detailed Review -->
+                <div class="space-y-4">
+                    <h3 class="text-lg font-bold font-heading text-slate-800 px-1">Детальний аналіз відповідей</h3>
+                    ${resultsHtml}
+                </div>
+            </div>
+        `;
+    }
+
+    // --- MAIN RENDER LOOP ---
+    function render() {
+        const app = document.getElementById('app');
+        
+        if (state.view === 'loading') {
+            app.innerHTML = renderLoading();
+        } else if (state.view === 'error') {
+            app.innerHTML = renderError();
+        } else if (state.view === 'quiz') {
+            app.innerHTML = renderQuiz();
+        } else if (state.view === 'submission') {
+            app.innerHTML = renderSubmission();
+        } else if (state.view === 'result') {
+            app.innerHTML = renderResult();
+        }
+        
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+    }
+
+    // Start App Initialization
+    init();
+
+  </script>
+</body>
+</html>
