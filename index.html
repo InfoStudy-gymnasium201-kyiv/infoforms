@@ -71,13 +71,13 @@
   </header>
 
   <!-- Hero Section -->
-  <section class="bg-gradient-to-b from-brand-900 via-brand-800 to-emerald-900 text-white py-8 md:py-12 relative overflow-hidden">
+  <section class="bg-gradient-to-b from-brand-900 via-brand-800 to-emerald-900 text-white py-6 sm:py-8 md:py-12 relative overflow-hidden">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center md:text-left">
-      <div class="inline-flex items-center space-x-2 bg-brand-500/20 backdrop-blur-md border border-brand-400/30 px-3 py-1 rounded-full text-brand-200 text-xs font-medium mb-3">
+      <div class="inline-flex items-center space-x-2 bg-brand-500/20 backdrop-blur-md border border-brand-400/30 px-3 py-1 rounded-full text-brand-200 text-xs font-medium mb-2.5">
         <i data-lucide="file-check-2" class="w-3.5 h-3.5 text-brand-400"></i>
         <span id="hero-badge">Тестування</span>
       </div>
-      <h1 id="hero-title" class="text-2xl sm:text-3xl lg:text-4xl font-extrabold font-heading tracking-tight text-white mb-2">
+      <h1 id="hero-title" class="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-extrabold font-heading tracking-tight text-white mb-2 leading-tight">
         Завантаження матеріалів...
       </h1>
       <p id="hero-desc" class="text-brand-100 text-xs sm:text-sm max-w-3xl leading-relaxed">
@@ -87,14 +87,14 @@
   </section>
 
   <!-- Main Container -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+  <main class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 flex-grow w-full">
     <div id="app">
       <!-- Контент динамічно генерується JS -->
     </div>
   </main>
 
   <!-- Footer -->
-  <footer class="bg-white border-t border-slate-200 py-6 mt-12">
+  <footer class="bg-white border-t border-slate-200 py-4 sm:py-6 mt-8 sm:mt-12">
     <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
       <p>© InfoStudy Gymnasium 201 Kyiv. Усі права захищено.</p>
     </div>
@@ -192,6 +192,7 @@
 
     function handleAnswer(qIndex, answerValue) {
         state.userAnswers[qIndex] = answerValue;
+        // Оновлюємо стан без перерендеру всього екрану для уникнення зсувів
         render(); 
     }
 
@@ -212,7 +213,39 @@
             state.userAnswers[qIndex] = [];
         }
         state.userAnswers[qIndex][blankIndex] = value;
-        render();
+        // Не викликаємо render(), оскільки це перезаписує елементи input та збиває фокус клавіатури!
+        updateQuizProgressUI();
+    }
+
+    function updateQuizProgressUI() {
+        if (state.view !== 'quiz') return;
+        const totalQuestions = state.quizData.questions.length;
+        let answeredCount = 0;
+        for (let i = 0; i < totalQuestions; i++) {
+            if (isQuestionAnswered(i)) answeredCount++;
+        }
+        
+        const isAllAnswered = answeredCount === totalQuestions;
+        const progressPercentage = Math.round((answeredCount / totalQuestions) * 100);
+
+        const counterEl = document.getElementById('progress-counter');
+        if (counterEl) counterEl.innerText = `${answeredCount} з ${totalQuestions}`;
+
+        const barEl = document.getElementById('progress-bar-inner');
+        if (barEl) barEl.style.width = `${progressPercentage}%`;
+
+        // Оновлення кнопок завершення
+        const finishBtns = document.querySelectorAll('.finish-quiz-btn');
+        finishBtns.forEach(btn => {
+            btn.disabled = !isAllAnswered;
+            if (isAllAnswered) {
+                btn.classList.remove('bg-slate-100', 'bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+                btn.classList.add('bg-brand-600', 'hover:bg-brand-700', 'text-white', 'cursor-pointer');
+            } else {
+                btn.classList.add('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+                btn.classList.remove('bg-brand-600', 'hover:bg-brand-700', 'text-white', 'cursor-pointer');
+            }
+        });
     }
 
     function isQuestionAnswered(qIndex) {
@@ -311,6 +344,8 @@
 
     function updateStudentData(field, value) {
         state[field] = value;
+        // Оновлюємо стан кнопки прямо в DOM без перерендеру всього інтерфейсу,
+        // щоб мобільна клавіатура не закривалася після кожного введеного символу!
         const btn = document.getElementById('submit-btn');
         if (btn) {
             const isValid = state.studentName.trim().length > 0 && state.studentClass.trim().length > 0;
@@ -408,37 +443,37 @@
         const isValid = state.studentName.trim() && state.studentClass.trim();
 
         return `
-            <div class="max-w-xl mx-auto bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200">
-                <div class="text-center mb-8">
-                    <div class="bg-brand-50 border border-brand-100 p-4 rounded-2xl inline-block mb-3">
-                        <i data-lucide="user-check" class="w-10 h-10 text-brand-600"></i>
+            <div class="max-w-xl mx-auto bg-white p-5 sm:p-8 rounded-2xl shadow-sm border border-slate-200">
+                <div class="text-center mb-6 sm:mb-8">
+                    <div class="bg-brand-50 border border-brand-100 p-3.5 sm:p-4 rounded-2xl inline-block mb-3">
+                        <i data-lucide="user-check" class="w-8 h-8 sm:w-10 sm:h-10 text-brand-600"></i>
                     </div>
-                    <h2 class="text-2xl font-bold font-heading text-slate-800">Збереження результату</h2>
+                    <h2 class="text-xl sm:text-2xl font-bold font-heading text-slate-800">Збереження результату</h2>
                     <p class="text-xs text-slate-500 mt-1">Введіть ваші дані для відправки оцінки вчителю</p>
                 </div>
 
-                <div class="space-y-5">
+                <div class="space-y-4 sm:space-y-5">
                     <div>
-                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">Прізвище та Ім'я учня/учениці</label>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 sm:mb-2">Прізвище та Ім'я учня/учениці</label>
                         <input 
                             type="text" 
                             value="${state.studentName}"
                             oninput="updateStudentData('studentName', this.value)"
                             placeholder="Наприклад: Іванов Іван"
                             ${state.isSubmitting ? 'disabled' : ''}
-                            class="w-full p-3.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none disabled:bg-slate-50 transition"
+                            class="w-full p-3 text-sm sm:text-base border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none disabled:bg-slate-50 transition"
                         >
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">Клас</label>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 sm:mb-2">Клас</label>
                         <input 
                             type="text" 
                             value="${state.studentClass}"
                             oninput="updateStudentData('studentClass', this.value)"
                             placeholder="Наприклад: 10-А"
                             ${state.isSubmitting ? 'disabled' : ''}
-                            class="w-full p-3.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none disabled:bg-slate-50 transition"
+                            class="w-full p-3 text-sm sm:text-base border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none disabled:bg-slate-50 transition"
                         >
                     </div>
 
@@ -538,8 +573,8 @@
             for (let b = 0; b < count; b++) {
                 const val = userBlanks[b] || '';
                 inputsHtml += `
-                    <div class="flex items-center gap-3">
-                        <span class="text-xs font-bold text-brand-700 bg-brand-50 border border-brand-100 px-2.5 py-1 rounded-lg">
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                        <span class="text-xs font-bold text-brand-700 bg-brand-50 border border-brand-100 px-2.5 py-1 rounded-lg w-fit">
                             Пропуск ${b + 1}
                         </span>
                         <input 
@@ -547,15 +582,15 @@
                             value="${val.replace(/"/g, '&quot;')}"
                             oninput="handleBlankAnswer(${idx}, ${b}, this.value)"
                             placeholder="Введіть відповідь..."
-                            class="flex-grow p-2.5 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
+                            class="w-full sm:flex-grow p-2.5 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
                         />
                     </div>
                 `;
             }
 
             return `
-                <div class="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                    <span class="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-2">Вкажіть пропущені слова:</span>
+                <div class="space-y-3 bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-1.5 sm:mb-2">Вкажіть пропущені слова:</span>
                     ${inputsHtml}
                 </div>
             `;
@@ -566,7 +601,7 @@
 
     function renderSingleChoiceOptions(idx, options, compareField) {
         return `
-            <div class="space-y-2.5">
+            <div class="space-y-2 sm:space-y-2.5">
                 ${options.map(opt => {
                     const optValue = opt[compareField] || opt.text || opt;
                     const isSelected = state.userAnswers[idx] === optValue;
@@ -575,7 +610,7 @@
                         : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50';
 
                     return `
-                        <label class="flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${borderClass}">
+                        <label class="flex items-start gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-xl border cursor-pointer transition-all ${borderClass}">
                             <div class="pt-0.5 flex-shrink-0">
                                 <input
                                     type="radio"
@@ -586,7 +621,7 @@
                                     class="w-4 h-4 text-brand-600 focus:ring-brand-500 border-slate-300"
                                 />
                             </div>
-                            <span class="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
+                            <span class="text-slate-700 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
                                 ${opt.key ? `<strong class="text-brand-800 mr-1">${opt.key}.</strong>` : ''}${formatText(opt.text || opt)}
                             </span>
                         </label>
@@ -609,12 +644,12 @@
 
         const questionsHtml = state.quizData.questions.map((q, idx) => {
             return `
-                <section id="q-${idx}" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm scroll-mt-24">
-                    <div class="flex items-start gap-3 mb-4">
-                        <span class="px-2.5 py-1 bg-brand-100 text-brand-800 text-xs font-bold rounded-lg flex-shrink-0">
+                <section id="q-${idx}" class="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm scroll-mt-28">
+                    <div class="flex items-start gap-2.5 sm:gap-3 mb-3 sm:mb-4">
+                        <span class="px-2.5 py-0.5 sm:py-1 bg-brand-100 text-brand-800 text-xs font-bold rounded-lg flex-shrink-0 mt-0.5">
                             ${idx + 1}
                         </span>
-                        <h3 class="text-base sm:text-lg font-bold font-heading text-slate-800 leading-snug whitespace-pre-wrap">
+                        <h3 class="text-sm sm:text-base md:text-lg font-bold font-heading text-slate-800 leading-snug whitespace-pre-wrap">
                             ${formatText(q.question)}
                         </h3>
                     </div>
@@ -630,31 +665,31 @@
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200';
 
             return `
-                <a href="#q-${idx}" class="h-9 w-9 rounded-lg flex items-center justify-center text-xs transition ${bgClass}">
+                <a href="#q-${idx}" class="h-8 w-8 sm:h-9 sm:w-9 rounded-lg flex items-center justify-center text-xs transition ${bgClass}">
                     ${idx + 1}
                 </a>
             `;
         }).join('');
 
         return `
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
                 
-                <!-- Sidebar status & navigation -->
-                <aside class="lg:col-span-3 order-2 lg:order-1">
-                    <div class="sticky top-20 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-5">
+                <!-- Sidebar status & navigation (Sticky on mobile & desktop) -->
+                <aside class="lg:col-span-3">
+                    <div class="sticky top-16 lg:top-20 z-40 bg-white/95 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm space-y-3 sm:space-y-5">
                         <div>
-                            <div class="flex justify-between items-center mb-2">
+                            <div class="flex justify-between items-center mb-1.5 sm:mb-2">
                                 <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Прогрес</span>
-                                <span class="text-xs font-bold text-brand-700">${answeredCount} з ${totalQuestions}</span>
+                                <span id="progress-counter" class="text-xs font-bold text-brand-700">${answeredCount} з ${totalQuestions}</span>
                             </div>
                             <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                <div class="bg-brand-500 h-full transition-all duration-300" style="width: ${progressPercentage}%"></div>
+                                <div id="progress-bar-inner" class="bg-brand-500 h-full transition-all duration-300" style="width: ${progressPercentage}%"></div>
                             </div>
                         </div>
 
                         <div>
-                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">Навігація за питаннями</span>
-                            <div class="flex flex-wrap gap-2">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2 sm:mb-3">Навігація</span>
+                            <div class="flex flex-wrap gap-1.5 sm:gap-2 max-h-28 lg:max-h-none overflow-y-auto pr-1">
                                 ${navGrid}
                             </div>
                         </div>
@@ -663,7 +698,7 @@
                             <button
                                 onclick="goToSubmission()"
                                 ${!isAllAnswered ? 'disabled' : ''}
-                                class="w-full py-3 px-4 rounded-xl font-bold text-xs sm:text-sm shadow transition-all flex items-center justify-center gap-2 ${isAllAnswered ? 'bg-brand-600 hover:bg-brand-700 text-white cursor-pointer' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}"
+                                class="finish-quiz-btn w-full py-2.5 sm:py-3 px-4 rounded-xl font-bold text-xs sm:text-sm shadow transition-all flex items-center justify-center gap-2 ${isAllAnswered ? 'bg-brand-600 hover:bg-brand-700 text-white cursor-pointer' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}"
                             >
                                 <span>Завершити тест</span>
                                 <i data-lucide="check-circle" class="w-4 h-4"></i>
@@ -673,14 +708,14 @@
                 </aside>
 
                 <!-- Questions list -->
-                <div class="lg:col-span-9 space-y-6 order-1 lg:order-2">
+                <div class="lg:col-span-9 space-y-4 sm:space-y-6">
                     ${questionsHtml}
                     
                     <div class="pt-4 flex justify-end">
                         <button
                             onclick="goToSubmission()"
                             ${!isAllAnswered ? 'disabled' : ''}
-                            class="py-3.5 px-8 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 ${isAllAnswered ? 'bg-brand-600 hover:bg-brand-700 text-white transform hover:-translate-y-0.5' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}"
+                            class="finish-quiz-btn w-full sm:w-auto py-3.5 px-8 rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 ${isAllAnswered ? 'bg-brand-600 hover:bg-brand-700 text-white transform hover:-translate-y-0.5' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}"
                         >
                             Завершити тест
                             <i data-lucide="arrow-right" class="w-4 h-4"></i>
