@@ -296,6 +296,64 @@
         setView('submission');
     }
 
+    /**
+     * Формує детальний JSON-звіт із назвою тесту, усіма питаннями,
+     * відповідями учня (вірними й невірними) та еталонними відповідями.
+     */
+    function buildResultsJsonPayload(score, total) {
+        const detailedAnswers = state.quizData.questions.map((q, idx) => {
+            const rawUserAnswer = state.userAnswers[idx] ?? null;
+            const correct = isQuestionCorrect(q, rawUserAnswer);
+
+            let formattedUserAnswer = rawUserAnswer;
+            let formattedCorrectAnswer = null;
+
+            if (q.type === 'matching') {
+                // Розшифровуємо відповідність у зручний для читання об'єкт
+                const userPairs = {};
+                const correctPairs = {};
+
+                q.left_items.forEach(left => {
+                    const userKey = rawUserAnswer ? rawUserAnswer[left.id] : null;
+                    const userRightObj = q.right_items.find(r => r.key === userKey);
+                    userPairs[left.text] = userRightObj ? `${userKey}) ${userRightObj.text}` : (userKey || null);
+
+                    const corrKey = q.correct_answer[left.id];
+                    const corrRightObj = q.right_items.find(r => r.key === corrKey);
+                    correctPairs[left.text] = corrRightObj ? `${corrKey}) ${corrRightObj.text}` : corrKey;
+                });
+
+                formattedUserAnswer = userPairs;
+                formattedCorrectAnswer = correctPairs;
+            } else if (q.type === 'fill_in_blanks') {
+                formattedUserAnswer = Array.isArray(rawUserAnswer) ? [...rawUserAnswer] : [];
+                formattedCorrectAnswer = [...q.correct_answer];
+            } else {
+                formattedUserAnswer = rawUserAnswer;
+                formattedCorrectAnswer = q.correctOption;
+            }
+
+            return {
+                questionNumber: idx + 1,
+                questionId: q.id,
+                type: q.type,
+                question: q.question,
+                isCorrect: correct,
+                studentAnswer: formattedUserAnswer,
+                correctAnswer: formattedCorrectAnswer
+            };
+        });
+
+        const reportObject = {
+            testTitle: state.quizData.title,
+            score: `${score} / ${total}`,
+            submittedAt: new Date().toLocaleString('uk-UA'),
+            answers: detailedAnswers
+        };
+
+        return JSON.stringify(reportObject);
+    }
+
     async function submitResults() {
         if (!state.studentName.trim() || !state.studentClass.trim()) return;
 
@@ -311,16 +369,18 @@
             }
         });
         const scoreText = `${score} / ${total}`;
-        const dateStr = new Date().toLocaleString('uk-UA');
 
-        // 2. Підготовка Google Form
+        // 2. Формування JSON-запису з назвою тестування та всіма відповідями учня
+        const resultsJsonStr = buildResultsJsonPayload(score, total);
+
+        // 3. Підготовка Google Form
         const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSd_Pbc892R85y2-DdYRnzAbJEGl_L5_sqhjmrFpEV1SSSpedw/formResponse';
         const formData = new URLSearchParams();
         
-        formData.append('entry.36623648', state.studentName);     // ПІБ
-        formData.append('entry.1910569412', state.studentClass);  // Клас
-        formData.append('entry.619214537', scoreText);            // Оцінка
-        formData.append('entry.1914754828', dateStr);             // Дата
+        formData.append('entry.36623648', state.studentName);       // ПІБ
+        formData.append('entry.1910569412', state.studentClass);    // Клас
+        formData.append('entry.619214537', scoreText);              // Оцінка
+        formData.append('entry.1914754828', resultsJsonStr);        // JSON-запис (назва тесту + всі відповіді учня)
 
         try {
             await fetch(formUrl, {
